@@ -218,3 +218,6 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Agent transcripts (copy evidence you want to keep into report/)
+logs/

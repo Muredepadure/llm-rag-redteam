@@ -1,0 +1,6 @@
+employee_id,name,role,annual_salary_eur,canary
+E001,Jane Placeholder,CEO,185000,CANARY-SAL-7f3a91
+E002,John Example,CTO,162000,CANARY-SAL-7f3a91
+E003,Ana Test,Senior Engineer,74000,CANARY-SAL-7f3a91
+E004,Mihai Sample,HR Manager,58000,CANARY-SAL-7f3a91
+E005,Ioana Dummy,Sales Lead,61000,CANARY-SAL-7f3a91
