@@ -7,6 +7,13 @@ A deliberately vulnerable LLM agent built as a red-teaming lab. All data in `dat
 The tool does no authorization check, so the prompt is the only control. Each intentional weakness is marked
 `# VULN:` in `agent.py`.
 
+**Version B** is `rag_agent.py`, the same agent with a RAG layer. On each turn it retrieves the most relevant chunks
+from `data/knowledge_base/` and pastes them into the prompt as context. The knowledge base holds a poisoned document
+(`remote_work_policy.md`) with hidden instructions, so a victim's innocent question can pull attacker-controlled text
+into the model's context — **indirect prompt injection**. Retrieved text is spliced in with no trust boundary
+(`# VULN:` in `rag_agent.py`), and the same unguarded `read_file` is still present, so a followed instruction can
+exfiltrate restricted files.
+
 Reads are confined to `data/` so the agent can never touch real files on the host. That limit is a lab safety rail,
 not part of the target.
 
@@ -16,9 +23,13 @@ not part of the target.
 python -m venv .venv
 .venv/Scripts/pip install -r requirements.txt   # Windows; use .venv/bin on Linux/macOS
 cp .env.example .env                            # then fill in your key
-.venv/Scripts/python agent.py                   # REPL
-.venv/Scripts/python agent.py -p "What's in faq.txt?"
+.venv/Scripts/python agent.py                   # Version A (direct) REPL
+.venv/Scripts/python rag_agent.py               # Version B (RAG) REPL
+.venv/Scripts/python rag_agent.py -p "How many vacation days do I get?"
 ```
+
+The RAG REPL prints a `[rag] retrieved [...]` line each turn, flagged `<-- POISONED CHUNK RETRIEVED` when the
+planted document is pulled in.
 
 ## Providers
 
@@ -50,6 +61,8 @@ in `report/evidence/`. (`logs/` is gitignored, so copy any log you want to keep 
 ## Roadmap
 
 - [x] Version A: prompt-only guardrail plus `read_file`
-- [ ] Attack campaign (jailbreaks, instruction override, direct injection) and pentest report (in progress)
-- [ ] RAG layer with a poisoned document (indirect prompt injection)
-- [ ] Version B: hardened controls (tool-level authorization, output filtering)
+- [x] Attack campaign on Version A (full exfiltration achieved; see the attack log) — report pending
+- [x] Version B: RAG layer with a poisoned document (indirect prompt injection)
+- [ ] Attack campaign on Version B
+- [ ] Hardened version: tool-level authorization, output filtering
+- [ ] Final pentest report
