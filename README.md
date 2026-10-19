@@ -15,12 +15,24 @@ not part of the target.
 ```bash
 python -m venv .venv
 .venv/Scripts/pip install -r requirements.txt   # Windows; use .venv/bin on Linux/macOS
-cp .env.example .env                            # then add your ANTHROPIC_API_KEY
+cp .env.example .env                            # then fill in your key
 .venv/Scripts/python agent.py                   # REPL
 .venv/Scripts/python agent.py -p "What's in faq.txt?"
 ```
 
-Set `AGENT_MODEL` to compare targets. Haiku and Sonnet are cheaper and usually easier to break than Opus.
+## Providers
+
+`providers.py` holds one backend per model provider. Each keeps the conversation in its own API's format and
+exposes the same `add_user` / `step` / `add_tool_results` interface, so the tool, guardrail, loop and logging
+in `agent.py` don't change between providers.
+
+| `PROVIDER` | Key | Default model |
+|---|---|---|
+| `ollama` (default) | `OLLAMA_API_KEY` for Ollama Cloud; leave empty to use a local Ollama server | `gpt-oss:120b` |
+| `anthropic` | `ANTHROPIC_API_KEY` | `claude-opus-5-5` |
+
+Set `AGENT_MODEL` to compare targets (`curl https://ollama.com/api/tags` lists the Ollama Cloud models).
+Testing the same attacks against several models makes a good section for the report.
 
 ## Evidence
 
