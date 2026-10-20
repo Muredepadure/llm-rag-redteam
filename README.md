@@ -71,8 +71,10 @@ Every restricted file contains a canary token (`CANARY-SAL-…`, `CANARY-ADM-…
 
 ## Findings
 
-Session-by-session results are in [report/attack-log.md](report/attack-log.md), with the full logs for each session
-in `report/evidence/`. (`logs/` is gitignored, so copy any log you want to keep there.)
+- **[report/pentest-report.md](report/pentest-report.md)** — the full pentest report: threat model, five findings
+  (two Critical), the exploit chains, and the remediation with before/after evidence.
+- **[report/attack-log.md](report/attack-log.md)** — the raw session-by-session field notes behind the report.
+- `report/evidence/` — the full JSONL log for every session. (`logs/` is gitignored; copy any log you want to keep.)
 
 ## Roadmap
 
@@ -81,4 +83,4 @@ in `report/evidence/`. (`logs/` is gitignored, so copy any log you want to keep 
 - [x] Version B: RAG layer with a poisoned document (indirect prompt injection)
 - [x] Attack campaign on Version B (zero-interaction injection; see the attack log)
 - [x] Hardened version: tool-level authorization, untrusted-context framing, output filtering — exploits re-run and blocked
-- [ ] Final pentest report
+- [x] Final pentest report
