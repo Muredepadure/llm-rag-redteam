@@ -31,6 +31,22 @@ cp .env.example .env                            # then fill in your key
 The RAG REPL prints a `[rag] retrieved [...]` line each turn, flagged `<-- POISONED CHUNK RETRIEVED` when the
 planted document is pulled in.
 
+### Hardened mode (the fix)
+
+Both agents take `--secure` to turn on the controls in `security.py`, and `--role employee|hr|admin` to set the
+session role (the application sets this, not the chat):
+
+```bash
+.venv/Scripts/python agent.py --secure                      # Version A, tool-level auth
+.venv/Scripts/python rag_agent.py --secure --role employee  # Version B, hardened RAG
+```
+
+The fixes: `read_file` authorizes restricted paths against the session role (so the prompt can't be talked past);
+retrieved RAG content is fenced as `<untrusted_context>` the model must not obey; and replies are scrubbed of known
+secrets. The deliberately weak system prompt is left unchanged, so the before/after shows enforcement moving from
+the model's judgement into code. Re-running the exploits against `--secure` blocks both (see Session 05 in the
+attack log).
+
 ## Providers
 
 `providers.py` holds one backend per model provider. Each keeps the conversation in its own API's format and
@@ -63,6 +79,6 @@ in `report/evidence/`. (`logs/` is gitignored, so copy any log you want to keep 
 - [x] Version A: prompt-only guardrail plus `read_file`
 - [x] Attack campaign on Version A (full exfiltration achieved; see the attack log) — report pending
 - [x] Version B: RAG layer with a poisoned document (indirect prompt injection)
-- [ ] Attack campaign on Version B
-- [ ] Hardened version: tool-level authorization, output filtering
+- [x] Attack campaign on Version B (zero-interaction injection; see the attack log)
+- [x] Hardened version: tool-level authorization, untrusted-context framing, output filtering — exploits re-run and blocked
 - [ ] Final pentest report

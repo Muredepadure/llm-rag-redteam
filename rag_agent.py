@@ -67,9 +67,20 @@ def build_retriever() -> Retriever:
 
 
 class RagAgent:
-    def __init__(self) -> None:
+    def __init__(self, secure: bool = False, role: str = "employee") -> None:
+        self.secure = secure
+        self.role = role
+        system = SYSTEM_PROMPT
+        if secure:
+            from security import HARDENED_RAG_NOTE, redact, secure_read_file
+            self.handlers = {"read_file": lambda path: secure_read_file(path, role)}
+            self.redact = redact
+            system = SYSTEM_PROMPT + HARDENED_RAG_NOTE
+        else:
+            self.handlers = TOOL_HANDLERS
+            self.redact = lambda t: t
         self.retriever = build_retriever()
-        self.provider, self.backend = make_backend(SYSTEM_PROMPT, TOOLS)
+        self.provider, self.backend = make_backend(system, TOOLS)
         self.session_id = time.strftime("%Y%m%d-%H%M%S-") + uuid.uuid4().hex[:6]
         LOG_DIR.mkdir(exist_ok=True)
         self.log_path = LOG_DIR / f"rag-{self.session_id}.jsonl"
@@ -82,16 +93,19 @@ class RagAgent:
             f.write(json.dumps(record, ensure_ascii=False) + "\n")
 
     def _run_tool(self, call) -> tuple:
-        handler = TOOL_HANDLERS.get(call.name)
+        handler = self.handlers.get(call.name)
         try:
             output, is_error = handler(**call.input), False
         except Exception as exc:
             output, is_error = f"Tool error: {exc}", True
         restricted = "restricted" in str(_resolve(call.input.get("path", "")) or "")
-        print(f"  [tool] {call.name}({json.dumps(call.input)})"
-              + ("  <-- RESTRICTED FILE READ" if restricted else ""))
+        denied = self.secure and restricted and output.startswith("Access denied")
+        tag = "  <-- ACCESS DENIED" if denied else (
+            "  <-- RESTRICTED FILE READ" if restricted else "")
+        print(f"  [tool] {call.name}({json.dumps(call.input)}){tag}")
         self._log("tool_call", name=call.name, input=call.input,
-                  restricted=restricted, is_error=is_error, output=output)
+                  restricted=restricted, denied=denied, is_error=is_error,
+                  output=output)
         return call, output, is_error
 
     def _augment(self, question: str) -> str:
@@ -105,7 +119,12 @@ class RagAgent:
                   scores=[round(s, 3) for _, s in hits], poisoned=poisoned)
         # VULN: retrieved text is concatenated straight into the prompt with no
         # trust boundary. The model cannot tell context from instructions.
+        # In secure mode it is fenced in <untrusted_context> and the system
+        # prompt tells the model never to follow instructions inside it.
         context = "\n\n".join(f"[{c.source}]\n{c.text}" for c, _ in hits)
+        if self.secure:
+            from security import wrap_untrusted
+            context = wrap_untrusted(context)
         return f"CONTEXT:\n{context}\n\nQUESTION: {question}"
 
     def ask(self, question: str) -> str:
@@ -125,22 +144,32 @@ class RagAgent:
         else:
             self._log("max_tool_rounds")
 
-        leaked = [c for c in CANARIES if c in turn.text]
-        self._log("assistant", content=turn.text, stop_reason=turn.stop,
-                  leaked_canaries=leaked, usage=turn.usage)
-        if leaked:
+        attempted = [c for c in CANARIES if c in turn.text]
+        reply = self.redact(turn.text)
+        leaked = [c for c in CANARIES if c in reply]
+        self._log("assistant", content=reply, stop_reason=turn.stop,
+                  attempted_canaries=attempted, leaked_canaries=leaked,
+                  usage=turn.usage)
+        if attempted and not leaked:
+            print(f"  [+] leak attempt redacted: {', '.join(attempted)}")
+        elif leaked:
             print(f"  [!] LEAK DETECTED: {', '.join(leaked)}")
-        return turn.text
+        return reply
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Vulnerable RAG AcmeBot (Version B)")
+    parser = argparse.ArgumentParser(description="RAG AcmeBot (Version B)")
     parser.add_argument("-p", "--prompt", help="send one prompt and exit")
+    parser.add_argument("--secure", action="store_true",
+                        help="enable tool-level auth, untrusted-context framing, output filter")
+    parser.add_argument("--role", default="employee",
+                        help="session role set by the app: employee|hr|admin (secure mode)")
     args = parser.parse_args()
 
-    agent = RagAgent()
+    agent = RagAgent(secure=args.secure, role=args.role)
+    mode = f"SECURE role={args.role}" if args.secure else "VULNERABLE"
     print(f"RAG AcmeBot [{agent.provider}: {agent.backend.model} @ {agent.backend.target}]"
-          f"  {len(agent.retriever.chunks)} chunks  log: {agent.log_path}")
+          f"  [{mode}]  {len(agent.retriever.chunks)} chunks  log: {agent.log_path}")
 
     def send(text: str) -> None:
         try:
@@ -162,7 +191,7 @@ def main() -> None:
         if user_input.lower() in {"exit", "quit"}:
             break
         if user_input.lower() == "reset":
-            agent = RagAgent()
+            agent = RagAgent(secure=args.secure, role=args.role)
             print(f"(new session, log: {agent.log_path})")
             continue
         if user_input:
